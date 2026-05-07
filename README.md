@@ -1,5 +1,7 @@
 # TheLook Ecommerce Analytics Pipeline
 
+![Pipeline CI](https://github.com/mridula237/e-commerce_analysis/actions/workflows/pipeline.yml/badge.svg)
+
 ## Business Problem
 
 E-commerce companies generate massive amounts of transactional data across orders, customers, products, and web sessions but most of it sits in raw tables that business teams cannot easily access or interpret. Without a structured analytics layer, questions like:
@@ -17,15 +19,15 @@ E-commerce companies generate massive amounts of transactional data across order
 
 A fully automated ELT pipeline that ingests raw e-commerce data, transforms it into business-ready analytics tables, and serves insights through an interactive dashboard including an AI layer that generates executive summaries and answers business questions in plain English.
 
-The pipeline runs daily without manual intervention, ensuring the dashboard always reflects the latest data.
+The pipeline is validated automatically on every push via GitHub Actions CI, ensuring model integrity is always maintained.
 
 ---
 
-## How Our Analysis Solves the Problem
+## How the Analysis Solves the Problem
 
-| Business Question | Our Solution |
+| Business Question | Solution |
 |---|---|
-| Who are our most valuable customers? | RFM segmentation Champions, At Risk, Hibernating, etc. |
+| Who are our most valuable customers? | RFM segmentation — Champions, At Risk, Hibernating, etc. |
 | Are we retaining customers month over month? | Cohort retention heatmap across all monthly cohorts |
 | Where are users dropping off before purchase? | Web funnel — Sessions → Product → Cart → Purchase |
 | Which categories and brands drive revenue? | Product performance scorecard with margin % and return rates |
@@ -57,8 +59,8 @@ products, inventory_items, events, distribution_centers
     └─────────────────────────────────┘
                     │
                     ▼
-    Apache Airflow — daily orchestration
-    (ingest → dbt run → dbt test → alert)
+    GitHub Actions CI — automated validation
+    (dbt compile → dbt run → dbt test on every push)
                     │
                     ▼
     Streamlit Dashboard — 5 pages
@@ -93,7 +95,7 @@ products, inventory_items, events, distribution_centers
 |-------|-----------|-----|
 | Data Storage | DuckDB | Embedded, zero-cost, fast analytical queries |
 | Transformation | dbt Core + dbt-duckdb | SQL-based, testable, version-controlled transforms |
-| Orchestration | Apache Airflow | Production-grade scheduling with retry and alerting |
+| CI/CD | GitHub Actions | Automated pipeline validation on every push |
 | Visualization | Streamlit + Plotly | Fast interactive dashboards in pure Python |
 | AI Layer | Llama3-70B via Groq | Free, fast LLM for business insight generation |
 | Language | Python, SQL | Industry standard for data engineering |
@@ -140,6 +142,9 @@ make dashboard
 
 ```
 e-commerce_analysis/
+├── .github/
+│   └── workflows/
+│       └── pipeline.yml          # GitHub Actions CI
 ├── ingestion/
 │   └── ingest_thelook.py         # CSV → DuckDB loader
 ├── dbt_project/
@@ -149,9 +154,6 @@ e-commerce_analysis/
 │   │   └── marts/                # Final BI-ready tables
 │   ├── schema.yml                # 25 data quality tests
 │   └── dbt_project.yml
-├── airflow/
-│   └── dags/
-│       └── ecommerce_pipeline_dag.py
 ├── dashboard/
 │   ├── app.py                    # Main 4-page dashboard
 │   └── pages/
