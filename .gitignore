@@ -1,0 +1,11 @@
+venv/
+data/
+*.duckdb
+*.duckdb.wal
+dbt_project/target/
+dbt_project/dbt_packages/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+.env

@@ -1,0 +1,26 @@
+-- models/marts/fct_orders.sql
+SELECT
+    order_id,
+    user_id,
+    customer_state,
+    customer_city,
+    age_group,
+    gender,
+    traffic_source,
+    order_status,
+    order_date,
+    order_month,
+    created_at,
+    shipped_at,
+    delivered_at,
+    fulfillment_days,
+    is_returned,
+    item_count,
+    gross_revenue,
+    returned_revenue,
+    net_revenue,
+    total_cost,
+    gross_profit,
+    unique_products,
+    order_value_tier
+FROM {{ ref('int_orders_enriched') }}

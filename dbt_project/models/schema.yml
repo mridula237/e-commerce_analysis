@@ -1,0 +1,80 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: main
+    tables:
+      - name: raw_orders
+        columns:
+          - name: order_id
+            data_tests: [not_null]
+      - name: raw_order_items
+        columns:
+          - name: id
+            data_tests: [not_null]
+      - name: raw_users
+        columns:
+          - name: id
+            data_tests: [not_null]
+      - name: raw_products
+        columns:
+          - name: id
+            data_tests: [not_null]
+      - name: raw_events
+        columns:
+          - name: id
+            data_tests: [not_null]
+      - name: raw_inventory_items
+      - name: raw_distribution_centers
+
+models:
+  - name: stg_orders
+    columns:
+      - name: order_id
+        data_tests: [not_null, unique]
+      - name: order_status
+        data_tests:
+          - accepted_values:
+              values: ['Complete', 'Cancelled', 'Returned', 'Processing',
+                       'Shipped', 'On Hold', 'pending', 'complete',
+                       'cancelled', 'returned', 'processing', 'shipped']
+
+  - name: stg_order_items
+    columns:
+      - name: order_item_id
+        data_tests: [not_null, unique]
+      - name: order_id
+        data_tests: [not_null]
+
+  - name: stg_users
+    columns:
+      - name: user_id
+        data_tests: [not_null, unique]
+
+  - name: stg_products
+    columns:
+      - name: product_id
+        data_tests: [not_null, unique]
+
+  - name: fct_orders
+    columns:
+      - name: order_id
+        data_tests: [not_null, unique]
+      - name: gross_revenue
+        data_tests: [not_null]
+
+  - name: dim_customers
+    columns:
+      - name: user_id
+        data_tests: [not_null, unique]
+      - name: rfm_segment
+        data_tests:
+          - accepted_values:
+              values: ['Champions', 'Loyal Customers', 'New Customers',
+                       'Potential Loyalists', 'At Risk',
+                       'Hibernating', 'Needs Attention']
+
+  - name: mart_product_performance
+    columns:
+      - name: product_id
+        data_tests: [not_null, unique]

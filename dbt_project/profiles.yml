@@ -1,0 +1,7 @@
+thelook_pipeline:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', '/tmp/thelook.duckdb') }}"
+      threads: 4
