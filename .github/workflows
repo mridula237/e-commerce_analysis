@@ -1,0 +1,60 @@
+name: TheLook Pipeline CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  dbt-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install duckdb==1.1.0 dbt-core==1.8.0 dbt-duckdb==1.8.0 pandas==2.2.0
+
+      - name: Create empty DuckDB database with raw tables
+        run: |
+          mkdir -p data
+          python3 -c "
+          import duckdb
+          conn = duckdb.connect('data/thelook.duckdb')
+          tables = {
+              'raw_orders': 'order_id VARCHAR, user_id VARCHAR, status VARCHAR, num_of_item INTEGER, created_at VARCHAR, returned_at VARCHAR, shipped_at VARCHAR, delivered_at VARCHAR',
+              'raw_order_items': 'id VARCHAR, order_id VARCHAR, user_id VARCHAR, product_id VARCHAR, inventory_item_id VARCHAR, status VARCHAR, created_at VARCHAR, shipped_at VARCHAR, delivered_at VARCHAR, returned_at VARCHAR, sale_price DOUBLE',
+              'raw_users': 'id VARCHAR, first_name VARCHAR, last_name VARCHAR, email VARCHAR, age INTEGER, gender VARCHAR, state VARCHAR, city VARCHAR, postal_code VARCHAR, country VARCHAR, latitude DOUBLE, longitude DOUBLE, traffic_source VARCHAR, created_at VARCHAR',
+              'raw_products': 'id VARCHAR, name VARCHAR, category VARCHAR, brand VARCHAR, department VARCHAR, sku VARCHAR, cost DOUBLE, retail_price DOUBLE, distribution_center_id VARCHAR',
+              'raw_events': 'id VARCHAR, user_id VARCHAR, sequence_number INTEGER, session_id VARCHAR, created_at VARCHAR, ip_address VARCHAR, city VARCHAR, state VARCHAR, postal_code VARCHAR, browser VARCHAR, traffic_source VARCHAR, uri VARCHAR, event_type VARCHAR',
+              'raw_inventory_items': 'id VARCHAR, product_id VARCHAR, created_at VARCHAR, sold_at VARCHAR, cost DOUBLE, product_category VARCHAR, product_name VARCHAR',
+              'raw_distribution_centers': 'id VARCHAR, name VARCHAR, latitude DOUBLE, longitude DOUBLE',
+          }
+          for table, schema in tables.items():
+              conn.execute(f'CREATE TABLE IF NOT EXISTS {table} ({schema})')
+          conn.close()
+          print('Database initialized successfully')
+          "
+
+      - name: dbt compile
+        run: cd dbt_project && dbt compile --profiles-dir .
+
+      - name: dbt run
+        run: cd dbt_project && dbt run --profiles-dir . --select staging intermediate marts
+
+      - name: dbt test
+        run: cd dbt_project && dbt test --profiles-dir .
+
+      - name: Pipeline validation complete
+        run: echo "✅ All dbt models compiled and tests passed!"
