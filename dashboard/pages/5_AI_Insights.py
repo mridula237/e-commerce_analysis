@@ -19,16 +19,22 @@ st.set_page_config(page_title="AI Insights", page_icon="🤖", layout="wide")
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 PROJECT_ID   = os.getenv("GCP_PROJECT", "thelook-pipeline")
-CREDENTIALS  = os.getenv("GOOGLE_APPLICATION_CREDENTIALS",
-                          os.path.join(PROJECT_ROOT, "credentials.json"))
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY", ""))
 GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
 MODEL        = "llama-3.3-70b-versatile"
 
 
 @st.cache_resource
 def get_client():
-    creds = service_account.Credentials.from_service_account_file(CREDENTIALS)
+    if "gcp_service_account" in st.secrets:
+        creds = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+    else:
+        creds = service_account.Credentials.from_service_account_file(
+            os.getenv("GOOGLE_APPLICATION_CREDENTIALS",
+                      os.path.join(PROJECT_ROOT, "credentials.json"))
+        )
     return bigquery.Client(project=PROJECT_ID, credentials=creds)
 
 

@@ -21,13 +21,21 @@ st.set_page_config(
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
 PROJECT_ID   = os.getenv("GCP_PROJECT", "thelook-pipeline")
-CREDENTIALS  = os.getenv("GOOGLE_APPLICATION_CREDENTIALS",
-                          os.path.join(PROJECT_ROOT, "credentials.json"))
 
 
 @st.cache_resource
 def get_client():
-    creds = service_account.Credentials.from_service_account_file(CREDENTIALS)
+    # Streamlit Cloud: credentials stored in st.secrets
+    if "gcp_service_account" in st.secrets:
+        creds = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+    else:
+        # Local: credentials stored in credentials.json
+        creds = service_account.Credentials.from_service_account_file(
+            os.getenv("GOOGLE_APPLICATION_CREDENTIALS",
+                      os.path.join(PROJECT_ROOT, "credentials.json"))
+        )
     return bigquery.Client(project=PROJECT_ID, credentials=creds)
 
 

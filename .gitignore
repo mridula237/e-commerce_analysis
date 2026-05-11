@@ -3,6 +3,7 @@ data/
 *.duckdb
 *.duckdb.wal
 credentials.json
+.streamlit/secrets.toml
 dbt_project/target/
 dbt_project/dbt_packages/
 __pycache__/
