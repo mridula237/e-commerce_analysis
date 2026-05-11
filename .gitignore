@@ -6,6 +6,8 @@ credentials.json
 .streamlit/secrets.toml
 dbt_project/target/
 dbt_project/dbt_packages/
+dbt_project/logs/
+dbt_project/.user.yml
 __pycache__/
 *.pyc
 .env

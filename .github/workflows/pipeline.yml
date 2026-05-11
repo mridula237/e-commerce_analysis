@@ -23,44 +23,24 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install duckdb==1.1.0 dbt-core==1.8.0 dbt-duckdb==1.8.0 pandas==2.2.0
+          pip install -r requirements-pipeline.txt
 
-      - name: Create empty DuckDB database with raw tables
-        run: |
-          mkdir -p data
-          python3 << 'PYEOF'
-          import duckdb, os
-          db_path = os.path.join(os.getcwd(), "data", "thelook.duckdb")
-          conn = duckdb.connect(db_path)
-          tables = {
-              'raw_orders': 'order_id VARCHAR, user_id VARCHAR, status VARCHAR, gender VARCHAR, num_of_item INTEGER, created_at VARCHAR, returned_at VARCHAR, shipped_at VARCHAR, delivered_at VARCHAR',
-              'raw_order_items': 'id VARCHAR, order_id VARCHAR, user_id VARCHAR, product_id VARCHAR, inventory_item_id VARCHAR, status VARCHAR, created_at VARCHAR, shipped_at VARCHAR, delivered_at VARCHAR, returned_at VARCHAR, sale_price DOUBLE',
-              'raw_users': 'id VARCHAR, first_name VARCHAR, last_name VARCHAR, email VARCHAR, age INTEGER, gender VARCHAR, state VARCHAR, city VARCHAR, postal_code VARCHAR, country VARCHAR, latitude DOUBLE, longitude DOUBLE, traffic_source VARCHAR, created_at VARCHAR',
-              'raw_products': 'id VARCHAR, name VARCHAR, category VARCHAR, brand VARCHAR, department VARCHAR, sku VARCHAR, cost DOUBLE, retail_price DOUBLE, distribution_center_id VARCHAR',
-              'raw_events': 'id VARCHAR, user_id VARCHAR, sequence_number INTEGER, session_id VARCHAR, created_at VARCHAR, ip_address VARCHAR, city VARCHAR, state VARCHAR, postal_code VARCHAR, browser VARCHAR, traffic_source VARCHAR, uri VARCHAR, event_type VARCHAR',
-              'raw_inventory_items': 'id VARCHAR, product_id VARCHAR, created_at VARCHAR, sold_at VARCHAR, cost DOUBLE, product_category VARCHAR, product_name VARCHAR',
-              'raw_distribution_centers': 'id VARCHAR, name VARCHAR, latitude DOUBLE, longitude DOUBLE',
-          }
-          for table, schema in tables.items():
-              conn.execute(f'CREATE TABLE IF NOT EXISTS {table} ({schema})')
-              print(f'Created {table}')
-          conn.close()
-          print(f'Database created at: {db_path}')
-          PYEOF
-
-      - name: Update dbt profiles with absolute path
-        run: |
-          DB_PATH="$(pwd)/data/thelook.duckdb"
-          sed -i "s|{{ env_var('DUCKDB_PATH'.*) }}|${DB_PATH}|g" dbt_project/profiles.yml
-          cat dbt_project/profiles.yml
+      - name: Write GCP credentials
+        run: echo '${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}' > credentials.json
 
       - name: dbt compile
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/credentials.json
         run: cd dbt_project && dbt compile --profiles-dir .
 
       - name: dbt run
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/credentials.json
         run: cd dbt_project && dbt run --profiles-dir . --select staging intermediate marts
 
       - name: dbt test
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/credentials.json
         run: cd dbt_project && dbt test --profiles-dir .
 
       - name: Pipeline validation complete
