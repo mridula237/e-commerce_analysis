@@ -1,4 +1,3 @@
--- models/marts/mart_product_performance.sql
 WITH items AS (
     SELECT * FROM {{ ref('stg_order_items') }}
 ),
@@ -26,13 +25,12 @@ SELECT
     COUNT(oi.order_item_id)                 AS total_units_sold,
     SUM(oi.sale_price)                      AS total_revenue,
     AVG(oi.sale_price)                      AS avg_sale_price,
-    -- Discount vs retail
     ROUND((1 - AVG(oi.sale_price)
         / NULLIF(p.retail_price, 0)) * 100, 2) AS avg_discount_pct,
     SUM(CASE WHEN oi.is_returned
         THEN 1 ELSE 0 END)                  AS returned_units,
-    ROUND(SUM(CASE WHEN oi.is_returned
-        THEN 1 ELSE 0 END)::DOUBLE
+    ROUND(CAST(SUM(CASE WHEN oi.is_returned
+        THEN 1 ELSE 0 END) AS FLOAT64)
         / NULLIF(COUNT(oi.order_item_id), 0) * 100, 2)
                                             AS return_rate_pct
 FROM items oi

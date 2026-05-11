@@ -6,21 +6,34 @@ Two modes:
 """
 
 import streamlit as st
-import duckdb
 import pandas as pd
 import plotly.express as px
 import os
 import json
 import requests
+from google.cloud import bigquery
+from google.oauth2 import service_account
 
 st.set_page_config(page_title="AI Insights", page_icon="🤖", layout="wide")
 
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(SCRIPT_DIR)))
-DB_PATH = "/Users/mridulakalaiselvan/Desktop/thelook-pipeline/data/thelook.duckdb"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+PROJECT_ID   = os.getenv("GCP_PROJECT", "thelook-pipeline")
+CREDENTIALS  = os.getenv("GOOGLE_APPLICATION_CREDENTIALS",
+                          os.path.join(PROJECT_ROOT, "credentials.json"))
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
-MODEL = "llama-3.3-70b-versatile"
+MODEL        = "llama-3.3-70b-versatile"
+
+
+@st.cache_resource
+def get_client():
+    creds = service_account.Credentials.from_service_account_file(CREDENTIALS)
+    return bigquery.Client(project=PROJECT_ID, credentials=creds)
+
+
+def query(sql: str) -> pd.DataFrame:
+    return get_client().query(sql).to_dataframe()
 
 
 def call_groq(prompt: str, system: str = "You are a senior data analyst and business intelligence expert. Be concise, specific, and actionable.") -> str:
@@ -43,13 +56,6 @@ def call_groq(prompt: str, system: str = "You are a senior data analyst and busi
     return resp.json()["choices"][0]["message"]["content"]
 
 
-def query(sql: str) -> pd.DataFrame:
-    conn = duckdb.connect(DB_PATH)
-    df = conn.execute(sql).df()
-    conn.close()
-    return df
-
-
 st.title("🤖 AI-Powered Business Insights")
 st.caption("Powered by Llama3-70B via Groq")
 
@@ -69,9 +75,9 @@ with mode[0]:
         if st.button("Generate Weekly Executive Summary", use_container_width=True):
             with st.spinner("Analyzing data and generating summary..."):
                 try:
-                    orders    = query("SELECT * FROM main_marts.fct_orders")
+                    orders    = query("SELECT * FROM marts.fct_orders")
                     complete  = orders[orders["order_status"].str.lower() == "complete"]
-                    customers = query("SELECT * FROM main_marts.dim_customers")
+                    customers = query("SELECT * FROM marts.dim_customers")
                     monthly   = complete.groupby("order_month").agg(
                         revenue=("gross_revenue", "sum"),
                         orders=("order_id", "count")
@@ -114,7 +120,7 @@ Write a concise executive summary (3-4 paragraphs) covering:
         if st.button("Detect Revenue Anomalies", use_container_width=True):
             with st.spinner("Scanning for anomalies..."):
                 try:
-                    orders   = query("SELECT * FROM main_marts.fct_orders")
+                    orders   = query("SELECT * FROM marts.fct_orders")
                     complete = orders[orders["order_status"].str.lower() == "complete"]
                     monthly  = complete.groupby("order_month").agg(
                         revenue=("gross_revenue", "sum"),
@@ -160,7 +166,7 @@ For each anomaly provide: likely explanation, whether concerning, recommended ac
                            ROUND(AVG(monetary),2) as avg_revenue,
                            ROUND(AVG(recency_days),0) as avg_recency_days,
                            ROUND(AVG(frequency),2) as avg_orders
-                    FROM main_marts.dim_customers
+                    FROM marts.dim_customers
                     GROUP BY rfm_segment ORDER BY avg_revenue DESC
                 """)
                 prompt = f"""
@@ -190,7 +196,7 @@ Under 400 words total.
     if st.button("Analyze Conversion Funnel", use_container_width=True):
         with st.spinner("Analyzing funnel..."):
             try:
-                funnel = query("SELECT * FROM main_marts.mart_funnel ORDER BY event_month")
+                funnel = query("SELECT * FROM marts.mart_funnel ORDER BY event_month")
                 total  = funnel.sum(numeric_only=True)
                 prompt = f"""
 TheLook funnel (all time):
@@ -267,12 +273,12 @@ Provide:
             with col_b:
                 st.markdown("### 📈 Quick Visualization")
                 if numeric_cols:
-                    x_col     = st.selectbox("X axis", df.columns.tolist())
-                    y_col     = st.selectbox("Y axis", numeric_cols)
+                    x_col      = st.selectbox("X axis", df.columns.tolist())
+                    y_col      = st.selectbox("Y axis", numeric_cols)
                     chart_type = st.selectbox("Chart type", ["Bar", "Line", "Scatter", "Histogram"])
                     if st.button("Generate Chart", use_container_width=True):
                         if chart_type == "Bar":
-                            fig = px.bar(df, x=x_col, y=y_col, title=f"{y_col} by {x_col}", color_continuous_scale="Blues")
+                            fig = px.bar(df, x=x_col, y=y_col, title=f"{y_col} by {x_col}")
                         elif chart_type == "Line":
                             fig = px.line(df, x=x_col, y=y_col, title=f"{y_col} over {x_col}")
                         elif chart_type == "Scatter":

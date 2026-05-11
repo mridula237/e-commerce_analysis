@@ -1,10 +1,9 @@
--- models/staging/stg_users.sql
 WITH source AS (
-    SELECT * FROM {{ source('raw', 'raw_users') }}
+    SELECT * FROM {{ source('thelook', 'users') }}
 )
 
 SELECT
-    CAST(id AS VARCHAR)                         AS user_id,
+    CAST(id AS STRING)                          AS user_id,
     first_name,
     last_name,
     email,
@@ -12,13 +11,12 @@ SELECT
     gender,
     state,
     city,
-    postal_code AS zip,
+    postal_code                                 AS zip,
     country,
     latitude,
     longitude,
     traffic_source,
     CAST(created_at AS TIMESTAMP)               AS created_at,
-    -- Age buckets
     CASE
         WHEN age < 18              THEN 'Under 18'
         WHEN age BETWEEN 18 AND 24 THEN '18-24'
@@ -30,4 +28,4 @@ SELECT
     END AS age_group
 FROM source
 WHERE id IS NOT NULL
-  AND country = 'United States'   -- US customers only
+  AND country = 'United States'

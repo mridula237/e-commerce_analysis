@@ -1,23 +1,27 @@
 """
 TheLook Ecommerce Ingestion Script
-Loads all TheLook CSVs into DuckDB raw schema
+Loads all TheLook CSVs into BigQuery raw dataset
 Dataset: https://www.kaggle.com/datasets/mustafakeser4/looker-ecommerce-bigquery-dataset
 """
 
-import duckdb
 import pandas as pd
 import os
 import logging
+from google.cloud import bigquery
+from google.oauth2 import service_account
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-DB_PATH      = os.path.join(PROJECT_ROOT, "data", "thelook.duckdb")
 RAW_DIR      = os.path.join(PROJECT_ROOT, "data", "raw")
 
-# CSV filename → DuckDB table name
+PROJECT_ID   = os.getenv("GCP_PROJECT", "thelook-pipeline")
+DATASET      = "raw"
+CREDENTIALS  = os.getenv("GOOGLE_APPLICATION_CREDENTIALS",
+                          os.path.join(PROJECT_ROOT, "credentials.json"))
+
 TABLES = {
     "orders.csv":               "raw_orders",
     "order_items.csv":          "raw_order_items",
@@ -29,26 +33,36 @@ TABLES = {
 }
 
 
-def check_csvs_exist() -> bool:
-    missing = [f for f in TABLES if not os.path.exists(os.path.join(RAW_DIR, f))]
-    if missing:
-        log.warning(f"Missing files: {missing}")
-        return False
-    return True
+def get_client() -> bigquery.Client:
+    creds = service_account.Credentials.from_service_account_file(CREDENTIALS)
+    return bigquery.Client(project=PROJECT_ID, credentials=creds)
 
 
-def load_csvs(conn):
+def ensure_dataset(client: bigquery.Client):
+    dataset_ref = bigquery.Dataset(f"{PROJECT_ID}.{DATASET}")
+    dataset_ref.location = "US"
+    client.create_dataset(dataset_ref, exists_ok=True)
+    log.info(f"Dataset {PROJECT_ID}.{DATASET} ready")
+
+
+def load_csvs(client: bigquery.Client):
     for fname, table in TABLES.items():
         fpath = os.path.join(RAW_DIR, fname)
         if not os.path.exists(fpath):
             log.warning(f"  Skipping {fname} — not found")
             continue
-        log.info(f"  Loading {fname} → {table}")
+
+        log.info(f"  Loading {fname} → {DATASET}.{table}")
         df = pd.read_csv(fpath, low_memory=False)
-        conn.execute(f"DROP TABLE IF EXISTS {table}")
-        conn.execute(f"CREATE TABLE {table} AS SELECT * FROM df")
-        n = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-        log.info(f"    ✓ {n:,} rows")
+
+        table_ref = f"{PROJECT_ID}.{DATASET}.{table}"
+        job_config = bigquery.LoadJobConfig(
+            write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+            autodetect=True,
+        )
+        job = client.load_table_from_dataframe(df, table_ref, job_config=job_config)
+        job.result()
+        log.info(f"    ✓ {len(df):,} rows loaded")
 
 
 def print_instructions():
@@ -67,19 +81,18 @@ def print_instructions():
 
 def run_ingestion():
     os.makedirs(RAW_DIR, exist_ok=True)
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
-    if not check_csvs_exist():
+    missing = [f for f in TABLES if not os.path.exists(os.path.join(RAW_DIR, f))]
+    if missing:
+        log.warning(f"Missing files: {missing}")
         print_instructions()
         return False
 
-    log.info(f"Connecting to DuckDB: {DB_PATH}")
-    conn = duckdb.connect(DB_PATH)
-    load_csvs(conn)
+    client = get_client()
+    ensure_dataset(client)
+    load_csvs(client)
 
-    tables = conn.execute("SHOW TABLES").df()
-    log.info(f"\n✅ {len(tables)} tables loaded into DuckDB")
-    conn.close()
+    log.info(f"\n✅ All tables loaded into BigQuery {PROJECT_ID}.{DATASET}")
     return True
 
 

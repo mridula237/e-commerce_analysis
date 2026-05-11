@@ -1,4 +1,3 @@
--- models/marts/mart_cohort_retention.sql
 WITH orders AS (
     SELECT user_id, order_month
     FROM {{ ref('fct_orders') }}
@@ -16,8 +15,8 @@ activity AS (
         f.cohort_month,
         o.order_month                               AS activity_month,
         COUNT(DISTINCT o.user_id)                   AS active_users,
-        DATEDIFF('month', f.cohort_month,
-            o.order_month)                          AS months_since_first
+        DATE_DIFF(o.order_month, f.cohort_month, MONTH)
+                                                    AS months_since_first
     FROM orders o
     JOIN first_order f ON o.user_id = f.user_id
     GROUP BY f.cohort_month, o.order_month
@@ -35,7 +34,7 @@ SELECT
     a.months_since_first,
     a.active_users,
     cs.cohort_size,
-    ROUND(a.active_users::DOUBLE
+    ROUND(CAST(a.active_users AS FLOAT64)
         / cs.cohort_size * 100, 2)                 AS retention_pct
 FROM activity a
 JOIN cohort_sizes cs ON a.cohort_month = cs.cohort_month

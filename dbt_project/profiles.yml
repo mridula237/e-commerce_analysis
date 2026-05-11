@@ -2,6 +2,11 @@ thelook_pipeline:
   target: dev
   outputs:
     dev:
-      type: duckdb
-      path: "{{ env_var('DUCKDB_PATH', '/tmp/thelook.duckdb') }}"
+      type: bigquery
+      method: service-account
+      project: thelook-pipeline
+      dataset: thelook
+      keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
       threads: 4
+      timeout_seconds: 300
+      location: US

@@ -1,6 +1,3 @@
--- models/intermediate/int_funnel.sql
--- Purchase funnel: session-level conversion analysis
-
 WITH events AS (
     SELECT * FROM {{ ref('stg_events') }}
 ),
@@ -8,7 +5,7 @@ WITH events AS (
 session_funnel AS (
     SELECT
         session_id,
-        DATE_TRUNC('month', MIN(event_at))              AS event_month,
+        DATE_TRUNC(DATE(MIN(event_at)), MONTH)          AS event_month,
         MAX(CASE WHEN event_type = 'home'
             THEN 1 ELSE 0 END)                          AS visited_home,
         MAX(CASE WHEN event_type IN ('category','brand')
@@ -34,16 +31,15 @@ SELECT
     SUM(viewed_product)                                 AS viewed_product,
     SUM(added_to_cart)                                  AS added_to_cart,
     SUM(purchased)                                      AS purchased,
-    -- Funnel conversion rates
-    ROUND(SUM(browsed_category)::DOUBLE
+    ROUND(CAST(SUM(browsed_category) AS FLOAT64)
         / NULLIF(COUNT(*), 0) * 100, 2)                AS home_to_browse_pct,
-    ROUND(SUM(viewed_product)::DOUBLE
+    ROUND(CAST(SUM(viewed_product) AS FLOAT64)
         / NULLIF(SUM(browsed_category), 0) * 100, 2)  AS browse_to_product_pct,
-    ROUND(SUM(added_to_cart)::DOUBLE
+    ROUND(CAST(SUM(added_to_cart) AS FLOAT64)
         / NULLIF(SUM(viewed_product), 0) * 100, 2)    AS product_to_cart_pct,
-    ROUND(SUM(purchased)::DOUBLE
+    ROUND(CAST(SUM(purchased) AS FLOAT64)
         / NULLIF(SUM(added_to_cart), 0) * 100, 2)     AS cart_to_purchase_pct,
-    ROUND(SUM(purchased)::DOUBLE
+    ROUND(CAST(SUM(purchased) AS FLOAT64)
         / NULLIF(COUNT(*), 0) * 100, 2)               AS overall_conversion_pct
 FROM session_funnel
 GROUP BY event_month

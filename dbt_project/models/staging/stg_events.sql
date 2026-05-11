@@ -1,15 +1,14 @@
--- models/staging/stg_events.sql
 WITH source AS (
-    SELECT * FROM {{ source('raw', 'raw_events') }}
+    SELECT * FROM {{ source('thelook', 'events') }}
 )
 
 SELECT
-    CAST(id AS VARCHAR)                              AS event_id,
-    CAST(user_id AS VARCHAR)                         AS user_id,
+    CAST(id AS STRING)                               AS event_id,
+    CAST(user_id AS STRING)                          AS user_id,
     sequence_number,
     session_id,
     CAST(created_at AS TIMESTAMP)                    AS event_at,
-    DATE_TRUNC('day', CAST(created_at AS TIMESTAMP)) AS event_date,
+    DATE(created_at)                                 AS event_date,
     ip_address,
     city,
     state,

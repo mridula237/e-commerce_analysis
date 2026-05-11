@@ -1,4 +1,3 @@
--- models/intermediate/int_customer_stats.sql
 WITH orders AS (
     SELECT * FROM {{ ref('int_orders_enriched') }}
     WHERE order_status = 'Complete'
@@ -15,8 +14,8 @@ rfm_raw AS (
         SUM(net_revenue)                        AS monetary,
         MAX(order_date)                         AS last_order_date,
         MIN(order_date)                         AS first_order_date,
-        DATEDIFF('day', MAX(order_date),
-            (SELECT max_date FROM ref_date))    AS recency_days,
+        DATE_DIFF((SELECT max_date FROM ref_date),
+            MAX(order_date), DAY)               AS recency_days,
         AVG(net_revenue)                        AS avg_order_value,
         MAX(age_group)                          AS age_group,
         MAX(gender)                             AS gender,
@@ -24,8 +23,8 @@ rfm_raw AS (
         MAX(traffic_source)                     AS traffic_source,
         SUM(CASE WHEN is_returned
             THEN 1 ELSE 0 END)                  AS returned_orders,
-        ROUND(SUM(CASE WHEN is_returned
-            THEN 1 ELSE 0 END)::DOUBLE
+        ROUND(CAST(SUM(CASE WHEN is_returned
+            THEN 1 ELSE 0 END) AS FLOAT64)
             / NULLIF(COUNT(DISTINCT order_id), 0) * 100, 1)
                                                 AS return_rate_pct
     FROM orders

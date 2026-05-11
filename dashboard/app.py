@@ -4,11 +4,12 @@ US clothing retailer — orders, customers, products, web funnel
 """
 
 import streamlit as st
-import duckdb
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import os
+from google.cloud import bigquery
+from google.oauth2 import service_account
 
 st.set_page_config(
     page_title="TheLook Analytics",
@@ -19,22 +20,24 @@ st.set_page_config(
 
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-DB_PATH      = os.path.join(PROJECT_ROOT, "data", "thelook.duckdb")
+PROJECT_ID   = os.getenv("GCP_PROJECT", "thelook-pipeline")
+CREDENTIALS  = os.getenv("GOOGLE_APPLICATION_CREDENTIALS",
+                          os.path.join(PROJECT_ROOT, "credentials.json"))
+
+
+@st.cache_resource
+def get_client():
+    creds = service_account.Credentials.from_service_account_file(CREDENTIALS)
+    return bigquery.Client(project=PROJECT_ID, credentials=creds)
 
 
 def query(sql: str) -> pd.DataFrame:
-    conn = duckdb.connect(DB_PATH)
-    df = conn.execute(sql).df()
-    conn.close()
-    return df
+    return get_client().query(sql).to_dataframe()
 
 
 def check_ready() -> bool:
     try:
-        if not os.path.exists(DB_PATH):
-            st.write(f"DB not found at: `{DB_PATH}`")
-            return False
-        n = query("SELECT COUNT(*) AS n FROM main_marts.fct_orders").iloc[0]["n"]
+        n = query("SELECT COUNT(*) AS n FROM marts.fct_orders").iloc[0]["n"]
         return n > 0
     except Exception as e:
         st.write(f"Error: {e}")
@@ -43,24 +46,8 @@ def check_ready() -> bool:
 
 if not check_ready():
     st.title("👗 TheLook Ecommerce Analytics")
-    st.error("⚠️ No data found.")
-    st.markdown("""
-    ### Setup
-    ```bash
-    # Download from Kaggle:
-    # https://www.kaggle.com/datasets/mustafakeser4/looker-ecommerce-bigquery-dataset
-    # Unzip CSVs into data/raw/
-    make ingest && make dbt-run && make dashboard
-    ```
-    """)
+    st.error("⚠️ No data found. Run: make pipeline")
     st.stop()
-
-
-def q(sql):
-    """Query with main_marts/main_staging schema prefix."""
-    return query(sql.replace("FROM marts.", "FROM main_marts.")
-                    .replace("FROM staging.", "FROM main_staging.")
-                    .replace("FROM intermediate.", "FROM main_intermediate."))
 
 
 # ── Sidebar ──
@@ -78,7 +65,7 @@ page = st.sidebar.radio("Navigation", [
 if page == "📦 Sales & Revenue":
     st.title("📦 Sales & Revenue")
 
-    orders = q("SELECT * FROM marts.fct_orders")
+    orders = query("SELECT * FROM marts.fct_orders")
     complete = orders[orders["order_status"].str.lower() == "complete"]
 
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -157,7 +144,7 @@ if page == "📦 Sales & Revenue":
 elif page == "👥 Customer Analytics":
     st.title("👥 Customer Analytics")
 
-    customers = q("SELECT * FROM marts.dim_customers")
+    customers = query("SELECT * FROM marts.dim_customers")
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Customers",   f"{len(customers):,}")
@@ -187,7 +174,7 @@ elif page == "👥 Customer Analytics":
         st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("📊 Cohort Retention Heatmap")
-    cohort = q("SELECT * FROM marts.mart_cohort_retention")
+    cohort = query("SELECT * FROM marts.mart_cohort_retention")
     cohort["cohort_month"] = pd.to_datetime(cohort["cohort_month"]).dt.strftime("%Y-%m")
     pivot = cohort.pivot_table(
         index="cohort_month",
@@ -233,7 +220,7 @@ elif page == "👥 Customer Analytics":
 elif page == "🛍️ Product Performance":
     st.title("🛍️ Product Performance")
 
-    products = q("SELECT * FROM marts.mart_product_performance")
+    products = query("SELECT * FROM marts.mart_product_performance")
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Total Products",    f"{len(products):,}")
@@ -257,19 +244,30 @@ elif page == "🛍️ Product Performance":
         st.plotly_chart(fig, use_container_width=True)
 
     with col_b:
-        st.subheader("Margin % vs Return Rate")
+        st.subheader("Category: Margin vs Price")
+        cat_summary = products.groupby("category").agg(
+            avg_margin=("margin_pct", "mean"),
+            avg_price=("avg_sale_price", "mean"),
+            total_revenue=("total_revenue", "sum"),
+            total_units=("total_units_sold", "sum")
+        ).reset_index()
         fig = px.scatter(
-            products,
-            x="margin_pct", y="return_rate_pct",
-            size="total_revenue", color="category",
-            hover_name="product_name",
-            title="Margin % vs Return Rate (bubble = revenue)",
-            labels={"margin_pct": "Margin %",
-                    "return_rate_pct": "Return Rate %"},
+            cat_summary,
+            x="avg_margin", y="avg_price",
+            size="total_revenue",
+            color="total_units",
+            hover_name="category",
+            color_continuous_scale="Blues",
+            title="Margin % vs Avg Sale Price by Category (bubble = revenue)",
+            labels={
+                "avg_margin": "Avg Margin %",
+                "avg_price": "Avg Sale Price ($)",
+                "total_units": "Units Sold"
+            },
         )
-        fig.add_hline(y=products["return_rate_pct"].mean(),
-                      line_dash="dash", line_color="red",
-                      annotation_text="Avg return rate")
+        fig.add_vline(x=cat_summary["avg_margin"].mean(),
+                      line_dash="dash", line_color="gray",
+                      annotation_text="Avg margin")
         st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Top 20 Products by Revenue")
@@ -312,9 +310,8 @@ elif page == "🛍️ Product Performance":
 elif page == "🔁 Web Funnel":
     st.title("🔁 Web Purchase Funnel")
 
-    funnel = q("SELECT * FROM marts.mart_funnel ORDER BY event_month")
+    funnel = query("SELECT * FROM marts.mart_funnel ORDER BY event_month")
 
-    # Overall funnel totals
     total = funnel.sum(numeric_only=True)
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Total Sessions",    f"{int(total['total_sessions']):,}")
@@ -326,7 +323,6 @@ elif page == "🔁 Web Funnel":
 
     st.divider()
 
-    # Funnel chart
     st.subheader("Overall Purchase Funnel")
     funnel_stages = pd.DataFrame({
         "Stage": ["Sessions", "Viewed Product", "Added to Cart", "Purchased"],
@@ -342,7 +338,6 @@ elif page == "🔁 Web Funnel":
                     color_discrete_sequence=["#3498db"])
     st.plotly_chart(fig, use_container_width=True)
 
-    # Monthly conversion trend
     st.subheader("Monthly Conversion Rate Trend")
     funnel["event_month"] = pd.to_datetime(funnel["event_month"])
     fig = go.Figure()
